@@ -1,0 +1,97 @@
+---
+title: "The biological integrity of French rivers did not improve over the last seventeen 3 years according to the national Fish-Based-Index (FBI)"
+subtitle: "Results"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+  bookdown::word_document2:
+always_allow_html: true
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+
+```{css, echo = FALSE}
+p.caption {
+    font-size: 0.9em;
+    font-style: italic;
+    color: grey;
+    margin-right: 10%;
+    margin-left: 10%;  
+    text-align: justify;
+}
+```
+
+
+```{r}
+# install packages
+library(tidyverse)
+library(flextable)
+
+load(file = "../manuscript/figures/figures.rda")
+```
+
+# Figures
+
+## Fig1
+
+```{r}
+ggsave(filename = "../manuscript/figures/fig1.bmp",
+       plot = fig1,
+       dpi = 300)
+```
+
+## Fig2
+
+```{r}
+ggsave(filename = "../manuscript/figures/fig2.bmp",
+       plot = fig2,
+       dpi = 300)
+```
+
+## Fig3
+
+```{r}
+ggsave(filename = "../manuscript/figures/fig3.bmp",
+       plot = fig3,
+       height = 3,
+       dpi = 300)
+```
+
+## Fig4
+
+```{r}
+ggsave(filename = "../manuscript/figures/fig4.bmp",
+       plot = fig4,
+       dpi = 300,
+       height = 3,
+       width = 3)
+```
+
+## Fig5
+
+```{r}
+ggsave(filename = "../manuscript/figures/fig5.bmp",
+       plot = fig5,
+       dpi = 300)
+```
+
+## Tab2
+
+```{r}
+tab2b <- tab2 %>%
+  flextable::autofit(add_w = 0,
+                     add_h = 0,
+                     part = c("body", "header")) %>%
+  flextable::line_spacing(space = 0.5, part = "body") %>%
+  flextable::bold(part = "body", j = -1) %>%
+  flextable::align(align = "center", part = c("body"), j = -1)
+#   
+# 
+# flextable::save_as_html(tab2b, path = "../manuscript/figures/tab2.html")
+```
+

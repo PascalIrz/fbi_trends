@@ -1,0 +1,371 @@
+---
+title: "The biological integrity of French rivers did not improve over the last seventeen 3 years according to the national Fish-Based-Index (FBI)"
+subtitle: "Population trend indicators"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+#  bookdown::word_document2
+always_allow_html: true
+params:
+  refnet_start: 2013
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Load packages and data
+
+```{r}
+# install packages
+# devtools::install_github("pascalirz/aspe")
+library(aspe)
+library(tidyverse)
+library(trend)
+
+# install custom functions
+source("../R/functions.R")
+source("../R/mk_st_by_group.R")
+
+# load data
+load(file = "../processed_data/30_indicators.RData")
+```
+
+# Aim of this file
+
+The aim of this file is to get the dataframes that will further be used to plot the yearly indicators against year, along with linear trend. We want the regression line to be solid only when the slope is significantly different from zero (p = 0.05). To avoid temporal autocorrelation issues, this significance is estimated by a Mann-Kendall non-parametric rank test (and the slope direction by Sen-Theil regression).
+
+The two families of indicators considered are :
+
+- FBI metrics
+- population indicators
+
+Hence, the trends significance are assessed for each indicator and joined to the yearly indicators dataframes.
+
+Ultimately, the populations indicators dataframes are stacked, which will allow to produce nice gridded plots and synthetic tables.
+
+# FBI scores
+
+## Trend FBI percentiles
+
+```{r}
+fbi_trends_since_refnet_start <- fbi_quartiles %>% 
+  pivot_longer(p25:pc_bad_or_better) %>% 
+  tester_pente_mk_multi2(var_groupe1 = network,
+                         var_groupe2 = name,
+                         var_x = annee,
+                         var_y = value) %>% 
+  mutate(period = ifelse(
+    network == "REFNET",
+    paste0(params$refnet_start, "-2023"),
+    "2007-2023"))
+
+# assembly
+# NB the REPNET rows are duplicated for the plots
+# NB the slope signs is interpreted opposingly for FBI percentiles and percentages above threshold
+fbi_trends <- fbi_trends_since_refnet_start %>% 
+ # rbind(fbi_trends_since_2007) %>% 
+  mutate(trend = case_when(trend == "Increase" & str_length(name) == 3 ~ "Degradation",
+                           trend == "Decrease" & str_length(name) == 3 ~ "Improvement",
+                           trend == "Increase" & str_length(name) != 3 ~ "Improvement",
+                           trend == "Decrease" & str_length(name) != 3 ~ "Degradation",
+                           TRUE ~ "No trend")) %>% 
+  arrange(network) %>% 
+  select(network, period, everything())
+```
+
+## Trend FBI percentiles - test of the slope for REPNET 2013-2023
+
+```{r}
+fbi_trends_repnet_since_2013 <- fbi_quartiles %>% 
+  filter(network == 'REPNET',
+         annee > 2012) %>% 
+  pivot_longer(p25:pc_bad_or_better) %>% 
+  tester_pente_mk_multi2(var_groupe1 = network,
+                         var_groupe2 = name,
+                         var_x = annee,
+                         var_y = value) %>% 
+  mutate(period = "2013-2023")
+
+# assembly
+# NB the REPNET rows are duplicated for the plots
+# NB the slope signs is interpreted opposingly for FBI percentiles and percentages above threshold
+fbi_trends_repnet_since_2013 <- fbi_trends_repnet_since_2013 %>% 
+  mutate(trend = case_when(trend == "Increase" & str_length(name) == 3 ~ "Degradation",
+                           trend == "Decrease" & str_length(name) == 3 ~ "Improvement",
+                           trend == "Increase" & str_length(name) != 3 ~ "Improvement",
+                           trend == "Decrease" & str_length(name) != 3 ~ "Degradation",
+                           TRUE ~ "No trend")) %>% 
+  select(network, period, everything())
+```
+
+## Trend FBI percentiles - test of the slope for 2013-2023 without shared sites
+
+```{r}
+fbi_trends_exclusive <- fbi_quartiles_exclusive %>% 
+  filter(annee > 2012) %>% 
+  pivot_longer(p25:p75) %>% 
+  tester_pente_mk_multi2(var_groupe1 = network,
+                         var_groupe2 = name,
+                         var_x = annee,
+                         var_y = value) %>% 
+  mutate(period = "2013-2023")
+
+fbi_trends_exclusive <- fbi_trends_exclusive %>% 
+  mutate(trend = case_when(trend == "Increase" ~ "Degradation",
+                           trend == "Decrease" ~ "Improvement",
+                           TRUE ~ "No trend")) %>% 
+  arrange(network) %>% 
+  select(network, period, everything())
+```
+# FBI metrics
+
+## Calculation
+
+```{r}
+metrics_trends <- fbi_metrics_median %>%
+  tester_pente_mk_multi2(var_groupe1 = metric,
+                         var_groupe2 = network,
+                         var_x = annee,
+                         var_y = p50) %>% 
+  mutate(trend = case_when(trend == "Increase" ~ "Degradation",
+                           trend == "Decrease" ~ "Improvement",
+                           TRUE ~ "No trend")#,
+       #  network = "REPNET"
+         ) %>% 
+  select(network, metric, everything())
+```
+
+## Cleaning
+
+```{r}
+metrics_trends_flex <- metrics_trends %>%
+  mutate_at(
+    .vars = vars(mk_pvalue, sens_slope),
+    .funs = round,
+    digits = 3
+  ) %>%
+  set_names(
+    c(
+      "Network",
+      "Metric",
+      "Mann-Kendall P-value",
+      "Sen's slope",
+      "Slope significance",
+      "Trend"
+    )
+  )
+
+metrics_trends_flex
+```
+
+# Populations indicators 
+
+## Species modelled occurrence probability
+
+The idea here is to assess whether the species distribution models underlying the FBI perform as well today as they used to, or if a 'drift' can be detected reflecting modifications of the species' ranges. Our hypothesis is that under the effect of broad-scale environmental changes and of local habitat conditions (e.g. improvement of water quality due to à better treatment of sewage), the models lost accuracy. For each species, our indicators of this accuracy are the mismatches between prediction and observation, i.e. the rates of observed presences despite being predicted absent (false absences), and of observed absence despite being predicted present (false presences). The species are considered as predicted present if, and only if, their modeled probability of occurrence exceeds 0.5.
+
+Should a species shift habitat in response to broad-scale changes, both indicators are expected to rise. Should a species expand, the false presences are expected to decrease and false absences to increase, and reverse in case of range contraction. 
+
+We acknowledge that uncertainty exists in detection probability, that may vary across species, however, we consider that it should be rather constant in time, and hence not affect the temporal trends.
+
+```{r}
+confusion_long <- confusion %>% 
+  select(esp_nom_latin:network, starts_with("pc_")) %>% 
+  pivot_longer(starts_with("pc_"), names_to = "variable", values_to = "value") %>% 
+  mutate(value = ifelse(is.na(value), 0, value))
+
+test2 <- confusion_long %>% 
+  mk_st_by_group(var_x = annee,
+                 var_y = value,
+                 esp_nom_latin,
+                 network,
+                 variable)
+
+test_proba_occur <- confusion_long %>% 
+  left_join(test2) %>% 
+  mutate(
+         variable = case_when(
+           variable == "pc_pred_abs_obs_pres" ~ "unexpected_presence",
+           variable == "pc_pred_pres_obs_abs" ~ "unexpected_absence",
+           variable == "pc_pred_pres_obs_pres" ~ "confirmed_presence",
+           variable == "pc_pred_abs_obs_abs" ~ "confirmed_absence",
+         )) %>% 
+  select(esp_nom_latin,
+         annee,
+         network,
+         variable,
+         value,
+         sens_slope,
+         mk_pvalue,         
+         sig,
+         trend)
+```
+
+
+Here, the species is found present at site though the model predicts its absence.
+
+## Species densities
+
+```{r}
+test_sp_densities <- sp_densities %>% 
+  mk_st_by_group(var_x = annee,
+                 var_y = density,
+                 esp_nom_latin,
+                 network)
+
+test_sp_densities <- sp_densities %>% 
+  dplyr::left_join(y = test_sp_densities) %>% 
+  mutate(variable = "density") %>% 
+  select(esp_nom_latin,
+         annee,
+         network,
+         variable,
+         value = density,
+         sens_slope,
+         mk_pvalue,
+         sig,
+         trend)
+```
+
+
+REPNET
+
+
+## Species occupancy rate across sites
+
+For each species and each year, this indicator is the ratio of the number of sites where the species was observed by the number of sites surveyed.
+
+```{r}
+test_sp_occupancy <- sp_occupancy %>% 
+  mk_st_by_group(var_x = annee,
+                 var_y = occurency_rate,
+                 esp_nom_latin,
+                 network)
+
+test_sp_occupancy <- sp_occupancy %>% 
+  dplyr::left_join(y = test_sp_occupancy) %>% 
+  mutate(variable = "occupancy_rate") %>% 
+  select(esp_nom_latin,
+         annee,
+         network,
+         variable,
+         value = occurency_rate,
+         sens_slope,
+         mk_pvalue,
+         sig,
+         trend)
+```
+
+
+## Joining species trends dataframes
+
+Here, we aim at assembling (stacking) the species trends dataframes in order to allow a grid plot handy for visualising side-by-side all the indicators for each species.
+
+```{r}
+sp_trends <- test_proba_occur %>% 
+  rbind(test_sp_densities) %>% 
+  rbind(test_sp_occupancy) %>% 
+  mutate(sig01 = mk_pvalue < 0.1,
+         trend01 = case_when(
+           sig01 & sign(sens_slope) == 1 ~ "Increase",
+           sig01 & sign(sens_slope) == -1 ~ "Decrease",
+           TRUE ~ "No trend"),
+    variable = as.factor(variable),
+    variable = fct_relevel(
+      variable,
+      "density",
+      "occupancy_rate",
+      "confirmed_presence",
+      "unexpected_presence",
+      "confirmed_absence",
+      "unexpected_absence"
+    )
+  )  %>% 
+  select(esp_nom_latin,
+         annee,
+         network,
+         variable,
+         value,
+         sig,
+         sig01,
+         trend,
+         trend01)  
+```
+
+# Trend tests by point
+
+To assess the significance of a monotonous temporal trend for each sampling point, a Mann-Kendall non-parametric test is performed. Sen-Theil slope is then estimated in order to retrieve its sign. As the FBI score is a measure of degradation, both are positively correlated. Hence, if the trend is significant and the sign is positive, FBI scores tend to increase through time, reflecting a degradation of the river. On the contrary, a significant trend with a positive sign indicates an improvement on 'river health'. The same applied to FBI metrics. 
+
+## FBI
+
+```{r}
+# count nb FBI data per sampling point
+n_fbi_by_point <- fbi %>% 
+  group_by(pop_id) %>% 
+  summarise(n_years = n_distinct(annee))
+
+# at least 3 data per point required for the tests
+selected_point_ids <- n_fbi_by_point %>% 
+  filter(n_years > 3) %>% 
+  pull(pop_id)
+
+# apply tests to each sampling point
+fbi_trends_by_point <- fbi %>%
+  filter(!is.na(ipr),
+         pop_id %in% selected_point_ids) %>% 
+  tester_pente_mk_multi(var_groupe = pop_id,
+                        var_x = annee,
+                        var_y = ipr) %>% 
+  # translate slope into interpretable FBI trend
+  mutate(trend = case_when(
+    trend == "Decrease" ~"Improvement",
+    trend == "Increase" ~"Degradation",
+    TRUE ~ "No trend"
+  )) %>% 
+  # add bassin
+  left_join(y = fbi_metrics %>% 
+              select(pop_id, unh_libelle) %>% 
+              distinct())
+```
+
+## FBI metrics
+
+```{r}
+# apply tests to each sampling point
+fbi_metrics_trends_by_point <- fbi_metrics %>%
+  filter(!is.na(value),
+         pop_id %in% selected_point_ids) %>%
+  tester_pente_mk_multi2(
+    var_groupe1 = pop_id,
+    var_groupe2 = metric,
+    var_x = annee,
+    var_y = value
+  ) %>%
+  # translate slope into interpretable FBI trend
+  mutate(
+    trend = case_when(
+      trend == "Decrease" ~ "Improvement",
+      trend == "Increase" ~ "Degradation",
+      TRUE ~ "No trend"
+    )
+  )
+```
+
+# Saving
+
+```{r}
+save(fbi_trends,
+     fbi_trends_repnet_since_2013,
+     fbi_trends_exclusive,
+     metrics_trends,
+     metrics_trends_flex,
+     points_ref_status_2_cats,
+     sp_trends,
+     fbi_trends_by_point,
+     fbi_metrics_trends_by_point,
+     file = "../processed_data/40_trends.RData")
+```
+

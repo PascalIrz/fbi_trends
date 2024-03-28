@@ -1,0 +1,755 @@
+---
+title: "The biological integrity of French rivers did not improve over the last seventeen 3 years according to the national Fish-Based-Index (FBI)"
+subtitle: "Results"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+  bookdown::word_document2:
+always_allow_html: true
+params:
+  refnet_start: 2013
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+
+```{css, echo = FALSE}
+p.caption {
+    font-size: 0.9em;
+    font-style: italic;
+    color: grey;
+    margin-right: 10%;
+    margin-left: 10%;  
+    text-align: justify;
+}
+```
+
+
+```{r}
+# install packages
+# devtools::install_github("pascalirz/aspe")
+library(aspe)
+library(tidyverse)
+library(flextable)
+
+# install custom functions
+source("../R/functions.R")
+source("../R/gg_temp_fbi.R")
+source("../R/gg_box_env_fbi_trend.R")
+
+# load data
+load(file = "../processed_data/10_maps.RData")
+load(file = "../processed_data/key_figures.RData")
+load(file = "../processed_data/30_indicators.RData")
+load(file = "../processed_data/40_trends.RData")
+```
+
+# The dataset
+
+## The networks
+
+From the overall dataset of the Aspe database, only 3 monitoring networks are considered here.
+
+-   Réseau de Contrôle de Surveillance (RCS)\
+-   Réseau Hydrobiologique Piscicole (RHP)\
+-   Réseau de Référence Pérenne (RRP)
+
+The former two are monitoring networks considered representative of the diversity of the rivers ecosystems in continental France and operated unmodified since 2007. Pooled together, they are further referred to as "REPNET". The RRP (perennial reference network) encompasses only minimally-impacted sites. It is operated unmodified since 2013, and further referred to as "REFNET". 
+
+Note that one site can contribute to more than one network (true also for one survey).
+
+## Data selection
+
+A first selection is made to keep only the surveys:
+
+-   belonging to REPNET (since 2007) and REFNET (since `r params$refnet_start`)
+-   with FBI rating
+
+Then, we selected only the surveys on the sites surveyed annually or bi-annually.
+
+Eventually, our dataset covers `r nb_surveys` surveys carried out on `r nb_sites` sites.
+
+```{r, fig.cap = "Venn diagram showing the number of sampling sites belonging to the reference network, to the monitoring networks and to both."}
+grid::grid.draw(venn)
+```
+
+> *Are the sampling sites distributed evenly in space?*
+
+```{r, fig.cap = "Map of mainland France distinguishing the reference and monitoring networks. A single point can be on both maps."}
+fig1 <- simple_map + 
+    geom_sf(data = district_limits,
+            linewidth = 1) +
+  geom_sf(data = points_geo,
+          aes(col = network),
+          alpha = 0.5) +
+
+  facet_wrap(facets = vars(network)) +
+  theme(panel.background = element_rect(fill = "lightblue")) +
+  coord_sf(xlim = c(-5.4, 8.4),
+           ylim = c(42, 51.2),
+           expand = FALSE) +
+  theme(legend.position = "none") +
+      scale_color_manual(
+        values = c("green3", "brown"),
+        labels = c("Monitoring", "Reference"),
+        name = "Network"
+      )
+
+fig1
+```
+
+## Sampling effort across time
+
+> *Is the sampling effort constant in time?*
+
+```{r, fig.cap = "Annual number of sites surveyed."}
+fbi_3_cats <- fbi %>% 
+  select(annee, pop_id, network) %>% 
+  pivot_wider(names_from = network,
+              values_from = network,
+              values_fill = NA,
+              values_fn = ~TRUE,
+              ) %>% 
+  as.data.frame() %>% 
+  mutate(network_3_cats = case_when(
+    REPNET & is.na(REFNET) ~ "REPNET",
+    is.na(REPNET) & REFNET ~ "REFNET",
+    TRUE ~ "Both",
+  ))
+    
+sites_by_years <- fbi_3_cats %>% 
+  group_by(annee, network_3_cats) %>% 
+  summarise(n_sites = n_distinct(pop_id)) %>% 
+  ungroup() %>% 
+  mutate(network_3_cats = fct_relevel(network_3_cats, "REFNET", "both"))
+
+fig_s1 <- ggplot(data = sites_by_years,
+       aes(x = annee,
+           y = n_sites,
+           fill = network_3_cats)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(x = "Year",
+       y = "Number of sites sampled annually",
+       fill = "") +
+  scale_fill_manual(values = c("green3", "grey", "brown")) +
+  theme_bw()
+
+fig_s1
+```
+
+# Fish-based Index
+
+## REFNET vs. REPNET
+
+On the overall dataset, the percentages of surveys with a FBI score "Good" or above (i.e. FBI < 16) is:
+
+```{r}
+fbi_pc_good %>% 
+  flextable::flextable()
+```
+
+
+## Nationwide trend
+
+> *Is there a temporal trend in FBI? Do the trends differ between reference and non-refence sites?*
+
+```{r, fig.cap = "Fish-based Index temporal trends for the sites belonging to the reference and monitoring networks. For each serie, the points and solid lines represent the annual median value across sites and the ribbon is the interquartile range."}
+fig2 <- fbi_quartiles %>%
+  filter(annee >= params$refnet_start | network == "REPNET") %>%
+  gg_temp_fbi(
+    var_x = annee,
+    var_y = p50,
+    var_group = network,
+    df_classes = fbi_classes,
+    nb_col = 1,
+    max_y = 40,
+    inv_y = FALSE
+  ) +
+  geom_ribbon(
+    aes(
+      x = annee,
+      y = p50,
+      ymin = p25,
+      ymax = p75,
+      col = network
+    ),
+    alpha = 0.2,
+    linetype = "dotted"
+  )
+
+fig2
+```
+
+Testing the trends significance for each of the percentiles:
+
+```{r, fig.height = 3, fig.cap="Temporal trend in FBI scores annual 25, 50 and 75 percentiles across the sites for REPNET and REFNET. Solid regression lines indicate that the Mann-Kendall trend test is significant at the 5% threshold."}
+data <- fbi_quartiles %>%
+  select(annee:p75) %>% 
+  pivot_longer(p25:p75, names_to = "variable") %>% 
+  left_join(y = fbi_trends %>% 
+              rename(variable = name)) %>% 
+ # filter(!(period == "2013-2022" & annee < 2013 & network == "REFNET")) %>% 
+  mutate(period = ifelse(period == "2013-2022",
+                         "REFNET since 2013", 
+                         "REFNET since 2007"))
+
+fig3 <- g_sp_trends_indicators2(
+  df = data,
+  var_x = annee,
+  var_y = value,
+  var_col = network,
+  var_facet_col = variable,
+#  var_facet_row = period,
+  var_sig = trend,
+  scales = "free_y",
+  y_lab = "FBI percentile value",
+  ncol = 3
+)
+
+fig3
+```
+
+```{r, fig.height = 3, fig.width = 3, fig.cap="Temporal trend in the annual percentage of sites with 'high' or 'good' integrity according to the FBI for REPNET and REFNET. The solid regression line indicates that the Mann-Kendall trend test is significant at the 5% threshold."}
+data <- fbi_quartiles %>%
+  select(annee, network, value = pc_good_or_better) %>% 
+  mutate(variable = "pc_good_or_better") %>% 
+ # pivot_longer(p25:p75, names_to = "variable") %>% 
+  left_join(y = fbi_trends %>% 
+              rename(variable = name)) %>% 
+ # filter(!(period == "2013-2022" & annee < 2013 & network == "REFNET")) %>% 
+  mutate(period = ifelse(period == "2013-2022",
+                         "REFNET since 2013", 
+                         "REFNET since 2007"))
+
+fig4 <- g_sp_trends_indicators2(
+  df = data,
+  var_x = annee,
+  var_y = value,
+  var_col = network,
+  var_facet_col = variable,
+#  var_facet_row = period,
+  var_sig = trend,
+  scales = "free_y",
+  y_lab = "% of sites with FBI values < 16",
+  ncol = 1
+) +
+  theme( strip.text.x = element_blank() ) +
+  scale_y_continuous(labels = scales::percent)
+
+fig4
+```
+
+NB: In the table below, trends are interpreted differently for the percentage of sites in 'good condition' (for which an increase indicated improvement) and for the percentiles (for which an increase indicates a degradation).
+
+This table indicates that the slopes are not significant whatever the percentile and the network. However, for REFNET, p75 is close to the 5% threshold (p = 0.07) with an increasing trend (positive slope, i.e. degradation) and the percentage of sites in 'good condition' significantly decreases (negative slope, i.e. degradation). Both are congruent with a degradation trend in reference sites. 
+
+```{r, eval = TRUE}
+tab1_data1 <- fbi_trends %>% 
+  filter(name %in% c("p25", "p50", "p75", "pc_good_or_better")) %>% 
+#  filter(!(network == "REPNET" & period == "2013-2022")) %>% # these rows are duplicated
+  mutate(name = ifelse(name == "pc_good_or_better", "pc_good", name),
+         name = as.factor(name),
+         name = fct_relevel(name, "p25", "p50", "p75", "pc_good_or_better")) %>% 
+  arrange(network, period, name) %>% 
+  select(network, period, variable = name, everything())
+
+# 
+#   flextable::flextable() %>% 
+#   flextable::autofit() %>% 
+#   flextable::colformat_double(j = 3:4, digits = 3) %>% 
+#   flextable::align(align = "center", part = "all") %>% 
+#   flextable::color(i = ~ network == "REFNET", color = "green3") %>% 
+#   flextable::color(i = ~ network == "REPNET", color = "brown") %>% 
+#   flextable::bold(i = ~ trend != "No trend") %>% 
+#   flextable::hline(i = 4) %>% 
+#   flextable::colformat_double(j = 5, digits = 4) %>% 
+#   flextable::set_caption("Mann-Kendall test of monotonic temporal trend for the 25, 50 and 75 percentiles of annual FBI score for each network, along with the percentage of sites in 'good' condition. The rows in bold indicate a significant trend (mk_pvalue < 0.05).")
+```
+
+## Test of slope for REPNET 2013-2023
+
+```{r, eval = TRUE}
+tab1_data2 <- fbi_trends_repnet_since_2013 %>% 
+  filter(name %in% c("p25", "p50", "p75", "pc_good_or_better")) %>% 
+  mutate(name = ifelse(name == "pc_good_or_better", "pc_good", name),
+         name = as.factor(name),
+         name = fct_relevel(name, "p25", "p50", "p75", "pc_good_or_better")) %>% 
+  arrange(network, period, name) %>% 
+  select(network, period, variable = name, everything())
+
+
+
+```
+
+Merge the tables above.
+
+```{r}
+tab1 <- tab1_data1 %>% 
+  rbind(tab1_data2) %>% 
+  flextable::flextable() %>% 
+  flextable::autofit() %>% 
+  flextable::colformat_double(j = 3:4, digits = 3) %>% 
+  flextable::align(align = "center", part = "all") %>% 
+  flextable::color(i = ~ network == "REFNET", color = "green3") %>% 
+  flextable::color(i = ~ network == "REPNET", color = "brown") %>% 
+  flextable::bold(i = ~ trend != "No trend") %>% 
+  flextable::hline(i = c(4, 8)) %>% 
+  flextable::colformat_double(j = 5, digits = 4) %>% 
+  flextable::set_caption("Mann-Kendall test of monotonic temporal trend for the 25, 50 and 75 percentiles of annual FBI score for REPNET, 2013-2013, along with the percentage of sites in 'good' condition. The rows in bold indicate a significant trend (mk_pvalue < 0.05).")
+
+tab1
+```
+
+
+## Test of the slope for 2013-2023 without shared sites
+
+In the following table, the analysis is the same as above apart from the fact that the 125 sites that are shared between REPNET and REFNET have been excluded. This is made to verify that the common trends observed on REFNET and REPNET are not driven by these common sites.
+
+```{r, eval = TRUE}
+tab_s2 <- 
+fbi_trends_exclusive %>% 
+  arrange(network, period, name) %>% 
+  select(network, period, variable = name, everything()) %>% 
+  flextable::flextable() %>% 
+  flextable::autofit() %>% 
+  flextable::colformat_double(j = 3:4, digits = 3) %>% 
+  flextable::align(align = "center", part = "all") %>% 
+  flextable::color(i = ~ network == "REFNET", color = "green3") %>% 
+  flextable::color(i = ~ network == "REPNET", color = "brown") %>% 
+  flextable::bold(i = ~ trend != "No trend") %>% 
+  flextable::hline(i = 3) %>% 
+  flextable::colformat_double(j = 5, digits = 4) %>% 
+  flextable::set_caption("Mann-Kendall test of monotonic temporal trend for the 25, 50 and 75 percentiles of annual FBI score for REPNET and REFNET, 2013-2013, excluding the sites that are shared between these networks. The rows in bold indicate a significant trend (mk_pvalue < 0.05).")
+
+tab_s2
+```
+
+# FBI metrics
+
+> *Do the FBI functional metrics display temporal trends?*
+
+```{r, fig.cap="Temporal trend in FBI metrics annual median across the sites for REPNET and REFNET. Solid regression lines indicate that the Mann-Kendall trend test is significant at the 5% threshold."}
+fbi_metrics_median <- fbi_metrics_median %>%
+  left_join(y = metrics_trends) %>%
+  filter(annee >= params$refnet_start | network == "REPNET") %>%
+  mutate(metric = fct_recode(metric, total_nb_sp = "nb_total_sp",
+                             total_dens_indiv = "dens_total_indiv"))
+  
+  
+
+fig5 <- g_temp_metrics2(df = fbi_metrics_median,
+                var_x = annee,
+                var_y = p50,
+                var_group = network,
+                var_facet = metric,
+                var_sig = sig,
+                scale = "free_y")
+
+fig5
+```
+
+# Populations trends
+
+## assembly of dataframe
+
+```{r}
+# assembly of the dataframe
+sp_trends <- sp_trends %>% 
+ # mutate(network = "REFNET") %>% 
+  filter(annee >= params$refnet_start | network == "REPNET") %>% 
+  # rbind(sp_trends_repnet %>% 
+  #         mutate(network = "REPNET")) %>% 
+  complete(esp_nom_latin, annee, variable)
+```
+
+## Plot
+
+```{r, fig.height = 50, fig.width = 12, dpi = 300, fig.cap = "Temporal trend in the fish populations indicators. Each point is the annual mean value of the indicator. Solid regression lines indicate that the Mann-Kendall trend test is significant at the 5% threshold. All the indicators for a given species are on a row."}
+fig_s3 <- g_sp_trends_indicators2(
+  df = sp_trends,
+  var_x = annee,
+  var_y = value,
+  var_col = network,
+  var_facet_col = variable,
+  var_facet_row = esp_nom_latin,
+  var_sig = trend,
+  scales = "free_y",
+  x_lab = "Year",
+  y_lab = "",
+  ncol = 6
+) 
+
+fig_s3
+```
+
+## Cross analysis of the temporal trends of the metrics and of the populations indicators
+
+
+The table below is intended to facilitate an interpretation of the trends in the FBI metrics by the populations trends. It is designed considering that (i) all the species are not considered in the calculation of all the metrics, (ii) the density-based metrics have to be interpreted with respect to the species densities, while the richness-based metrics have to be interpreted with respect to species occupancy rates and (iii) the species displaying a significant trend neither in density nor in occupancy rate are not likely to explain any metric trend.
+
+```{r}
+# selecting density and occupancy trends
+# recoding trends into symbols for visual analysis
+species_metrics <- sp_trends %>% 
+  filter(variable %in% c("density", "occupancy_rate")) %>% 
+  select(-annee, -value) %>% 
+  distinct() %>% 
+  mutate(trend2 = case_when(sig01 & trend == "Increase" ~ "\U2197",
+                            sig01 & trend == "Decrease" ~ "\U2198",
+                            TRUE ~ "\U1F784"))
+
+# species with with significant population trend potentially contributing to the variation in at least one FBI metric  
+species_to_keep <- species_metrics %>% 
+  filter(sig01) %>% 
+  pull(esp_nom_latin) %>% 
+  unique()
+
+# joining the the table showing which species contributes to which metric to the table of
+# species populations indicator trends
+contrib <- read.csv2("../raw_data/IPR_params_Especes_Contributives.csv") %>% 
+  left_join(y = sp_fbi_conversion %>%
+              rename(Taxon = esp_code_alternatif)) %>% 
+  select(Taxon = esp_nom_latin,
+         nb_total_sp = NTE,
+         nb_rheophilic_sp = NER,
+         nb_lithophilic_sp = NEL,
+         dens_total_indiv = DTI,
+         dens_tolerant_indiv = DIT,
+         dens_invertivorous_indiv = DII,
+         dens_omnivorous_indiv = DIO
+         ) %>% 
+  distinct() %>% 
+  filter(!is.na(Taxon)) 
+
+tab_s1 <- contrib %>%
+  mutate(across(nb_total_sp:dens_omnivorous_indiv,
+         ~str_replace(., pattern = "O", replacement = "X")),
+         across(nb_total_sp:dens_omnivorous_indiv,
+         ~str_replace(., pattern = "N", replacement = ""))) %>% 
+  rename(total_nb_sp = nb_total_sp,
+         total_dens_indiv = dens_total_indiv) %>% 
+  flextable::flextable() %>% 
+  flextable::rotate(i = 1, j = -1, rotation = "btlr", part = "header")
+
+contrib <- contrib %>% 
+  pivot_longer(-Taxon, names_to = "metric", values_to = "contribution") %>% 
+  mutate(contribution = ifelse(contribution == "O", TRUE, FALSE),
+         variable = ifelse(str_detect(metric, "nb_"), "occupancy_rate", "density")) %>% 
+  filter(contribution)
+
+# tidying tables for REPNET and REFNET
+sp_contrib_refnet <- species_metrics %>% 
+  filter(network == "REFNET") %>% 
+  rename(Taxon = esp_nom_latin) %>% 
+  left_join(contrib) %>% 
+  select(Taxon, metric, trend2) %>%
+  pivot_wider(names_from = metric,
+              values_from = trend2,
+              values_fill = ""
+              ) %>% 
+  select(Taxon, starts_with("nb_"), everything())
+
+sp_contrib_repnet <- species_metrics %>% 
+  filter(network == "REPNET") %>% 
+  rename(Taxon = esp_nom_latin) %>% 
+  left_join(contrib) %>% 
+  select(Taxon, metric, trend2) %>% 
+  pivot_wider(names_from = metric,
+              values_from = trend2,
+              values_fill = "") %>% 
+  select(Taxon, starts_with("nb_"), everything())
+
+# asembling the 2 networks
+names(sp_contrib_refnet) <- paste0(names(sp_contrib_refnet), c("", rep("_refnet", 7)))
+
+sp_contrib <- sp_contrib_refnet %>% 
+  left_join(y = sp_contrib_repnet) %>% 
+  filter(Taxon %in% species_to_keep)
+
+tab_col_labs <- c(names(sp_contrib_repnet), names(sp_contrib_repnet)[2:8])
+tab_col_labs[c(2, 9)] <- "total_nb_sp"
+tab_col_labs[c(5, 12)] <- "total_dens_indiv"
+```
+
+
+```{r}
+# display output table
+tab2 <- sp_contrib %>% 
+  flextable() %>% 
+  add_header_row(values = c("", "Richness", "Density", "Richness", "Density"), colwidths = c(1, 3, 4, 3, 4)) %>% 
+  add_header_row(values = c("", "REFNET", "REPNET"), colwidths = c(1, 7, 7)) %>% 
+  rotate(i = 3, j = -1, rotation = "btlr", part = "header") %>% 
+  italic(j = 1) %>% 
+  set_header_labels(values = tab_col_labs) %>%
+  vline(j = c(1, 8)) %>% 
+  vline(j = c(4, 11), part = "body") %>% 
+  vline(i = 2:3, j = c(4, 11), part = "header") %>% 
+  flextable::color(j = 2:ncol(sp_contrib), 
+                color = function(x){
+                  out <- rep("transparent", length(x))
+                  out[x == "\U2198"] <- "#FF5320"
+                  out[x == "\U2197"] <- "blue"
+                  out
+                }) %>% 
+  bold(j = -1, part = "body") %>% 
+  bold(i = 3, j = c(3, 6, 12), part = "header") %>% 
+  valign(i = 3, valign = "bottom", part = "header") %>% 
+  valign(i = 3, j = 1, valign = "center", part = "header") %>% 
+  align(align = "center", part = "header") %>% 
+  align(j = -1, align = "center", part = "body") %>% 
+  width(j = 1, width = 5, unit = "in") %>% 
+  flextable::set_caption("Cross analysis of the species population trends and of their contributions to the metrics. The blank cells indicate that the species does not contribute to the calculation of the metric. The metrics in bold are those displaying significant temporal trends. The arrows indicate the significant population indicator trends associated to the metric (ie 'density' in case of the density-based metrics, 'occupancy_rate' in case of richness metrics). The dots indicate the species that contribute to the calculation of each metric but that display no significant population trend. The species with significant trends neither in 'density' nor in 'occupancy_rate', whatever the network, are not shown.")
+
+tab2
+```
+
+Thirteen taxa display significant trends neither in density nor in occupancy, whatever the network. After excluding them, 21 remain, from the 34 initially considered in the calculation of the FBI. This indicates that about two third of these taxa can not be qualified as stable.
+
+More significant trends can be observed in REPNET (18 taxa) than in REFNET (10 taxa). Significant temporal trends in the occupancy rate, related to the richness metrics, are more frequent (7 and 15 taxa, respectively for REFNET and REPNET) than in density (5 and 12 taxa, respectively). When comparing the two networks, the cross analysis reveals that only 10 taxa are likely to explain REFNET metrics trends, versus 18 for REPNET. The latter, with more sites and a longer time serie (17 years), may allow the detection of slighter trends than REFNET (13 years).
+
+*Gobio* sp. is the only taxon displaying both significantly increasing and decreasing indicators (an increasing occupancy trend in REFNET but a decreasing one in REPNET). All the other taxa display either increasing or decreasing trends. Note that occupancy and density never have opposite trends, thereby confirming the classical density-occupancy relationship and the consistency our results.
+
+Whatever the network, the Salmonids (*Salmo trutta* and *S. salar*) and the eel (*Anguilla anguilla*) display clear unfavourable population trends. The two taxa with the opposite trend are both Cyprinids (*Phoxinus* sp. and *Rhodeus amarus*).
+
+Focusing on the two metrics with significant (unfavourable) temporal trends in REFNET, the trend in the number of rheophilic species is likely explained by the decreasing occurrence of the Salmodids. The trend in the density in tolerant individuals is more difficult to interpret, as none of the taxa contributing to the calculation of this metric displays clear population trend.
+
+The density in total individuals is the only metric with a significant – unfavourable – trend in REPNET. Six out of seven taxa significantly increasing in density are Cyprinids. *Lampetra planeri* is the exception.
+
+
+# FBI trends at sites
+
+To assess the significance of a monotonous temporal trend for each sampling point, a Mann-Kendall non-parametric test is performed. Sen-Theil slope is then estimated in order to retrieve its sign. As the FBI score is a measure of degradation, both are positively correlated. Hence, if the trend is significant and the sign is positive, FBI scores tend to increase through time, reflecting a degradation of the river. On the contrary, a significant trend with a negative sign indicates an improvement of 'river health'.
+
+## FBI
+
+```{r, fig.cap = "Map of the Fish-based index trends for the REPNET sites."}
+map_data <- points_geo %>%
+  left_join(y = fbi_trends_by_point) %>%
+  left_join(y = points_ref_status_2_cats) %>% 
+  filter(!is.na(trend))
+
+fig_s2 <- ggplot() +
+  geom_sf(data = background) +
+  geom_sf(data = map_data %>% filter(network == "REPNET"),
+          aes(col = trend,
+              size = (trend != "No trend"))) +
+  scale_color_manual(name = "FBI trend",
+                     values = c(
+    "Degradation" = "red",
+    "Improvement" = "darkgreen",
+    "No trend" = "gray"
+  )) +
+  scale_size_manual(values = c(0.8, 2),
+                    guide = 'none') +
+  geom_sf(
+    data = district_limits,
+    size = 0.8,
+    col = "darkred",
+    alpha = 0
+  ) +
+  theme(panel.background = element_rect(fill = "lightblue")) +
+  coord_sf(xlim = c(-5.4, 8.4),
+           ylim = c(42, 51.2),
+           expand = FALSE)
+
+fig_s2
+```
+
+```{r}
+data <- map_data %>% 
+  sf::st_drop_geometry() %>% 
+  left_join(y = points_ref_status_2_cats) %>% 
+  select(pop_id, network, trend) %>% 
+  unique() %>%
+  group_by(network) %>% 
+  count(trend) 
+
+totals <- data %>% 
+  group_by(network) %>% 
+  summarise(n_sites = sum(n))
+
+data <- data %>% 
+  left_join(y = totals) %>% 
+  mutate(prop = 100 * n / n_sites,
+         prop = paste0(round(prop, 1), "%"),
+         prop = paste0(prop, " (n=", n, ")")) %>% 
+  select(-n, -n_sites) %>% 
+  pivot_wider(names_from = c(trend, network),
+              values_from = prop) %>% 
+  select(4, 1, 5, 2, 6, 3)
+
+tab_s3 <- data %>%  
+  flextable::flextable() %>% 
+  flextable::set_caption("Count and proportion of sites according to the Fish-based index trends.") %>% 
+  flextable::set_header_labels(
+    Degradation_REPNET = "REPNET",
+    Degradation_REFNET = "REFNET",
+    Improvement_REPNET = "REPNET",
+    Improvement_REFNET = "REFNET",
+    `No trend_REPNET` = "REPNET",
+    `No trend_REFNET` = "REFNET") %>%
+    flextable::align(align = "center", part = "all") %>% 
+      flextable::autofit() %>% 
+    flextable::add_header_row(values = c("Degradation", "Improvement", "No trend"),
+      colwidths = c(2, 2, 2)) %>% 
+   flextable::align(i = 1, align = "center", part = "header") %>% 
+     flextable::color(j = c(2, 4, 6), color = "green3", part = "body") %>% 
+   flextable::color(j = c(1, 3, 5), color = "brown", part = "body")
+
+tab_s3
+```
+
+```{r, fig.cap = "Comparison between the proportions of sites in improving and degradation conditions according to the FBI, across regions (dear co-authors, note that the regions are not those of the map ! This will be fixed is this plot and the map are both kept). The regions are ordered by their proportion of sites in degradation."}
+n_fbi_points_trends_by_basin <- fbi_trends_by_point %>%
+  group_by(unh_libelle, trend) %>%
+  tally()
+
+n_fbi_points_by_basin <- fbi_trends_by_point %>%
+  group_by(unh_libelle) %>%
+  tally() %>%
+  rename(n_tot = n)
+
+pc_fbi_points_trends_by_basin <- n_fbi_points_trends_by_basin %>%
+  left_join(n_fbi_points_by_basin) %>%
+  filter(trend != "No trend") %>%
+  ungroup() %>%
+  mutate(
+    pc = n / n_tot,
+    unh_libelle = str_replace(unh_libelle, "Bassin ", ""),
+    unh_libelle = as.factor(unh_libelle)
+  ) %>%
+  select(-n) %>%
+  pivot_wider(names_from = trend,
+              values_from = pc) %>%
+  mutate(unh_libelle = fct_reorder(unh_libelle, Degradation)) %>%
+  pivot_longer(Degradation:Improvement,
+               names_to = "trend",
+               values_to = "pc") %>%
+  ggplot(aes(x = unh_libelle,
+             y = pc,
+             fill = trend)) +
+  geom_bar(stat = "identity",
+           position = "dodge") +
+  scale_fill_manual(values = c("red", "darkgreen")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  coord_flip() +
+  labs(x = "Bassin",
+       y = "",
+       fill = "FBI trend")
+
+pc_fbi_points_trends_by_basin
+```
+
+
+
+## FBI metrics
+
+### Mapping
+
+> *Are some regions more prone than others to degradation measured by each of tthe metrics?*
+
+```{r, fig.width = 10, fig.height = 10, fig.cap = "Map of the Fish-based index metrics trends for the REPNET sites."}
+map_data <- points_geo %>%
+  left_join(fbi_metrics_trends_by_point) %>%
+  filter(!is.na(trend))
+
+fig_s4b <- ggplot() +
+  geom_sf(data = background) +
+  geom_sf(data = map_data %>% filter(network == "REPNET"),
+          aes(col = trend,
+              size = (trend != "No trend"))) +
+  scale_color_manual(
+    name = "FBI trend",
+    values = c(
+      "No trend" = "gray",
+      "Degradation" = "red",
+      "Improvement" = "darkgreen"
+    )
+  ) +
+  scale_size_manual(values = c(0.2, 1.2),
+                    guide = 'none') +
+  geom_sf(
+    data = district_limits,
+    size = 0.8,
+    col = "darkred",
+    alpha = 0
+  ) +
+  theme(panel.background = element_rect(fill = "lightblue")) +
+  coord_sf(xlim = c(-5.4, 8.4),
+           ylim = c(42, 51.2),
+           expand = FALSE) +
+  facet_wrap(vars(metric))
+
+fig_s4b
+```
+
+> *Are all metrics similarly prone to temporal trends?*
+
+```{r}
+data <- fbi_metrics_trends_by_point %>% 
+  left_join(y = points_ref_status_2_cats) %>% 
+  select(pop_id, metric, network, trend) %>% 
+  unique() %>% 
+  group_by(trend, metric, network) %>% 
+  tally()
+
+data <- data %>% 
+  left_join(y = totals) %>% 
+  mutate(prop = 100 * n / n_sites,
+         prop = paste0(round(prop, 1), "%"),
+         prop = paste0(prop, " (n=", n, ")")) %>% 
+  select(-n, -n_sites) %>% 
+  pivot_wider(names_from = c(trend, network),
+              values_from = prop) %>% 
+  select(1, 3, 2, 5, 4, 7, 6)
+
+
+data %>%  
+  flextable::flextable() %>% 
+  flextable::set_caption("Count and proportion of sites according to the Fish-based index metrics trends.") %>%
+  flextable::set_header_labels(
+    metric = "Metric",
+    Degradation_REPNET = "REPNET",
+    Degradation_REFNET = "REFNET",
+    Improvement_REPNET = "REPNET",
+    Improvement_REFNET = "REFNET",
+    `No trend_REPNET` = "REPNET",
+    `No trend_REFNET` = "REFNET") %>%
+    flextable::align(align = "center", part = "all") %>% 
+    flextable::align(j = 1, align = "left", part = "all") %>% 
+    flextable::autofit() %>% 
+   flextable::align(align = "center", part = "header") %>% 
+   flextable::color(j = c(3, 5, 7), color = "green3", part = "body") %>% 
+   flextable::color(j = c(2, 4, 6), color = "brown", part = "body") %>% 
+   flextable::add_header_row(values = c("", "Degradation", "Improvement", "No trend"),
+      colwidths = c(1, 2, 2, 2))
+```
+
+# Save output
+
+```{r}
+save(fig1,
+     fig2,
+     fig3,
+     fig4,
+     fig5,
+     tab1,
+     tab2,
+     file = "../manuscript/figures/figures.rda")
+
+save(fig_s1,
+     fig_s2,
+     fig_s3,
+  #   fig_s4,
+     tab_s1,
+     tab_s2,
+     tab_s3,
+     file = "../manuscript/figures/supplementary.rda")
+
+```
+
