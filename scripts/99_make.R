@@ -23,10 +23,10 @@ if (any(installed_packages == FALSE)) {
   install.packages(packages_list[!installed_packages])
 }
 
-## GitHub packages
-remotes::install_github("pascalirz/aspe")
-remotes::install_github("ropensci/rnaturalearthhires")
-remotes::install_github("pascalirz/tod")
+## GitHub packages if not already installed
+# remotes::install_github("pascalirz/aspe")
+# remotes::install_github("ropensci/rnaturalearthhires")
+# remotes::install_github("pascalirz/tod")
 
 
 # make background map ----
@@ -52,9 +52,21 @@ rmarkdown::render(
   input = 'scripts/40_assess_temporal_trends.Rmd'
 )
 
-# produce results file ----
+# assemble results ----
 rmarkdown::render(
-  input = 'scripts/60_output.Rmd',
-  params = list(refnet_start = refnet_start)#,
- # output_file = 'scripts/60_output.docx'
+  input = 'scripts/70_output_main.Rmd',
+  params = list(refnet_start = refnet_start)
+)
+
+# export figures in HD ----
+rmarkdown::render(
+  input = 'scripts/90_export_figures.Rmd',
+  output_file = 'scripts/90_export_figures.html'
+)
+
+
+# export figures in HD ----
+rmarkdown::render(
+  input = 'scripts/95_appendix.Rmd',
+  output_file = '../manuscript/fbi_trends_supplementary_material.html'
 )
