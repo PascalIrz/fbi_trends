@@ -291,13 +291,14 @@ Merge the tables above.
 ```{r}
 tab1 <- tab1_data1 %>% 
   rbind(tab1_data2) %>% 
+  mutate(trend = ifelse(trend == "No trend", "Non-significant", trend)) %>% 
   flextable::flextable() %>% 
   flextable::autofit() %>% 
   flextable::colformat_double(j = 3:4, digits = 3) %>% 
   flextable::align(align = "center", part = "all") %>% 
   flextable::color(i = ~ network == "REFNET", color = "green3") %>% 
   flextable::color(i = ~ network == "REPNET", color = "brown") %>% 
-  flextable::bold(i = ~ trend != "No trend") %>% 
+  flextable::bold(i = ~ trend != "Non-significant") %>% 
   flextable::hline(i = c(4, 8)) %>% 
   flextable::colformat_double(j = 5, digits = 4) %>% 
   flextable::set_caption("Mann-Kendall test of monotonic temporal trend for the 25, 50 and 75 percentiles of annual FBI score for REPNET, 2013-2013, along with the percentage of sites in 'good' condition. The rows in bold indicate a significant trend (mk_pvalue < 0.05).")
@@ -480,6 +481,7 @@ tab_col_labs[c(5, 12)] <- "total_dens_indiv"
 ```{r}
 # display output table
 tab2 <- sp_contrib %>% 
+  mutate(Taxon = str_replace(Taxon, pattern = "spp", replacement = "spp.")) %>% 
   flextable() %>% 
   add_header_row(values = c("", "Richness", "Density", "Richness", "Density"), colwidths = c(1, 3, 4, 3, 4)) %>% 
   add_header_row(values = c("", "REFNET", "REPNET"), colwidths = c(1, 7, 7)) %>% 

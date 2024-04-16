@@ -33,7 +33,7 @@ nice_map <- ggplot(background) +
   theme(panel.background = element_rect(fill = "lightblue")) +
   coord_sf(xlim = c(-5.4, 8.4),
            ylim = c(42, 51.2),
-           expand = FALSE) 
+           expand = FALSE)
 
 # display map
 nice_map
@@ -48,7 +48,7 @@ simple_map <- ggplot(background) +
 #  theme(panel.background = element_rect(fill = "lightblue")) +
   coord_sf(xlim = c(-5.4, 8.4),
            ylim = c(42, 51.2),
-           expand = FALSE) 
+           expand = FALSE)
 
 simple_map
 
@@ -56,4 +56,4 @@ save(nice_map,
      simple_map,
      background,
      district_limits,
-     file = "processed_data/10_maps.RData")
+     file = "../processed_data/10_maps.RData")
