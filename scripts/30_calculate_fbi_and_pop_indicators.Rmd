@@ -1,5 +1,5 @@
 ---
-title: "The biological integrity of French rivers did not improve over the last seventeen 3 years according to the national Fish-Based-Index (FBI)"
+title : "Assessing the effect of climate change on a bioassessment scheme: Lessons from a long-term river fish monitoring in France"
 subtitle: "Calculation of population and FBI-related indicators"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:

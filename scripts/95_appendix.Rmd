@@ -1,13 +1,17 @@
 ---
-title: "The biological integrity of French rivers did not improve over the last seventeen years according to the national Fish-Based-Index (FBI)"
-subtitle: "Supplementary material"
+title: "The biological integrity of French rivers did not improve over the last seventeen
+  years according to the national Fish-Based-Index (FBI)"
+subtitle: Supplementary material
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
+  word_document:
+    toc: true
+  bookdown::word_document2: null
   bookdown::html_document2:
     toc: true
     toc_float: true
-    number_sections: no
-  bookdown::word_document2:
+    number_sections: false
+  pdf_document: null
 params:
   refnet_start: 2013
 ---
@@ -138,7 +142,8 @@ sp_trends <- sp_trends %>%
   filter(annee >= params$refnet_start | network == "REPNET") %>% 
   # rbind(sp_trends_repnet %>% 
   #         mutate(network = "REPNET")) %>% 
-  complete(esp_nom_latin, annee, variable)
+  complete(esp_nom_latin, annee, variable) %>% 
+  mutate(esp_nom_latin = str_replace(esp_nom_latin, pattern = "spp", replacement = "spp."))
 
 
 fig_s3 <- g_sp_trends_indicators2(
@@ -164,6 +169,7 @@ fig_s3
 contrib <- read.csv2("../raw_data/IPR_params_Especes_Contributives.csv") %>% 
   left_join(y = sp_fbi_conversion %>%
               rename(Taxon = esp_code_alternatif)) %>% 
+  mutate(esp_nom_latin = str_replace(esp_nom_latin, pattern = "spp", replacement = "spp.")) %>% 
   select(Taxon = esp_nom_latin,
          nb_total_sp = NTE,
          nb_rheophilic_sp = NER,
@@ -184,6 +190,7 @@ tab_s1 <- contrib %>%
   rename(total_nb_sp = nb_total_sp,
          total_dens_indiv = dens_total_indiv) %>% 
   flextable::flextable() %>% 
+  flextable::italic(j = 1) %>%
   flextable::rotate(i = 1, j = -1, rotation = "btlr", part = "header") %>% 
   flextable::set_caption("List of taxa contributing to each metric making up the FBI.")
 
@@ -195,6 +202,7 @@ tab_s1
 ```{r}
 tab_s2 <- 
 fbi_trends_exclusive %>% 
+  mutate(trend = ifelse(trend == "No trend", "Non-significant", trend)) %>% 
   arrange(network, period, name) %>% 
   select(network, period, variable = name, everything()) %>% 
   flextable::flextable() %>% 
@@ -203,7 +211,7 @@ fbi_trends_exclusive %>%
   flextable::align(align = "center", part = "all") %>% 
   flextable::color(i = ~ network == "REFNET", color = "green3") %>% 
   flextable::color(i = ~ network == "REPNET", color = "brown") %>% 
-  flextable::bold(i = ~ trend != "No trend") %>% 
+  flextable::bold(i = ~ trend != "Non-significant") %>% 
   flextable::hline(i = 3) %>% 
   flextable::colformat_double(j = 5, digits = 4) %>% 
   flextable::set_caption("Mann-Kendall test of monotonic temporal trend for the 25, 50 and 75 percentiles of annual FBI score for REPNET and REFNET, 2013-2013, excluding the sites that are shared between these networks. The rows in bold indicate a significant trend (mk_pvalue < 0.05).")
@@ -239,6 +247,7 @@ data <- data %>%
 
 tab_s3 <- data %>%  
   flextable::flextable() %>% 
+  flextable::autofit() %>% 
   flextable::set_caption("Count and proportion of the REPNET and REFNET sites according to the Fish-based index trends.") %>% 
   flextable::set_header_labels(
     Degradation_REPNET = "REPNET",
@@ -249,7 +258,7 @@ tab_s3 <- data %>%
     `No trend_REFNET` = "REFNET") %>%
     flextable::align(align = "center", part = "all") %>% 
       flextable::autofit() %>% 
-    flextable::add_header_row(values = c("Degradation", "Improvement", "No trend"),
+    flextable::add_header_row(values = c("Degradation", "Improvement", "Non-significant"),
       colwidths = c(2, 2, 2)) %>% 
    flextable::align(i = 1, align = "center", part = "header") %>% 
      flextable::color(j = c(2, 4, 6), color = "green3", part = "body") %>% 
